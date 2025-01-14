@@ -119,10 +119,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cec2c5d3c5ff9f94c9c383eee165bbf5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  learningRate: 0.1
+  learningRate: 0.3
   discountFactor: 0.95
-  explorationRate: 0.1
+  explorationRate: 0.4
   moveSpeed: 5
+  visualizePath: 1
+  pathPointInterval: 0.1
+  pathColor: {r: 0, g: 0.2532153, b: 1, a: 1}
+  done: 0
 --- !u!54 &3882927544973054034
 Rigidbody:
   m_ObjectHideFlags: 0

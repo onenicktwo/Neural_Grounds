@@ -15,11 +15,10 @@ public class Agent : MonoBehaviour
     private Dictionary<string, float> qTable = new Dictionary<string, float>();
     private Vector3 startPosition;
     private Vector3 previousPosition;
-    private float accumulatedReward = 0f;
     private List<Vector3> pathPoints = new List<Vector3>();
     private float lastPathPointTime;
 
-    public bool hasReachedGoal = false;
+    public bool done = false;
 
     private float episodeReward = 0f;
 
@@ -40,7 +39,7 @@ public class Agent : MonoBehaviour
 
     public void Act()
     {
-        if (hasReachedGoal) return;
+        if (done) return;
 
         string state = GetCurrentState();
         string action = ChooseAction(state);
@@ -48,7 +47,7 @@ public class Agent : MonoBehaviour
         float reward = GetReward();
         string nextState = GetCurrentState();
         UpdateQTable(state, action, reward, nextState);
-        episodeReward += reward;
+        episodeReward += reward;  
 
         if (visualizePath && Time.time - lastPathPointTime > pathPointInterval)
         {
@@ -137,8 +136,8 @@ public class Agent : MonoBehaviour
 
         reward -= 0.01f;
 
-        reward += accumulatedReward;
-        accumulatedReward = 0f;
+        //reward += accumulatedReward;
+        //accumulatedReward = 0f;
 
         return reward;
     }
@@ -167,14 +166,14 @@ public class Agent : MonoBehaviour
         previousPosition = startPosition;
         pathPoints.Clear();
         lastPathPointTime = 0f;
-        accumulatedReward = 0f;
         episodeReward = 0f;
-        hasReachedGoal = false;
+        done = false;
     }
 
     public void ReceiveBonusReward(float bonusReward)
     {
-        accumulatedReward += bonusReward;
+        episodeReward += bonusReward;
+        done = true;
     }
 
     private void OnDrawGizmos()

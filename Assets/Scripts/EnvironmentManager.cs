@@ -40,12 +40,10 @@ public class EnvironmentManager : MonoBehaviour
 
     private void InitializeEnvironment()
     {
-        // Place goal
         goalObject = Instantiate(goalPrefab, Vector3.zero, Quaternion.identity);
         SetRandomGoalPosition();
 
-        // Place agents
-        Vector3 agentStartPos = Vector3.zero;
+        Vector3 agentStartPos = new Vector3(-8f, 0, 5f);
         for (int i = 0; i < numberOfAgents; i++)
         {
             GameObject agentObj = Instantiate(agentPrefab, agentStartPos, Quaternion.identity);
@@ -91,20 +89,20 @@ public class EnvironmentManager : MonoBehaviour
 
     public void StepAgents()
     {
-        bool allAgentsReachedGoal = true;
+        bool allAgentsDone = true;
 
         foreach (Agent agent in agents)
         {
-            if (!agent.hasReachedGoal)
+            if (!agent.done)
             {
                 agent.Act();
-                allAgentsReachedGoal = false; 
+                allAgentsDone = false; 
             }
         }
 
         stepsInEpisode++;
 
-        if (allAgentsReachedGoal)
+        if (allAgentsDone)
         {
             Debug.Log("All agents have reached the goal, ending episode early.");
             EndEpisode();

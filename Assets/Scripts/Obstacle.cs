@@ -1,9 +1,8 @@
 using UnityEngine;
 
-public class Goal : MonoBehaviour
+public class Obstacle : MonoBehaviour
 {
-    public float bonusRewardValue = 10f;
-
+    public float bonusNegativeReward = -10f;
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("Agent"))
@@ -11,7 +10,7 @@ public class Goal : MonoBehaviour
             Agent agent = other.GetComponent<Agent>();
             if (agent != null && !agent.done)
             {
-                agent.ReceiveBonusReward(bonusRewardValue);
+                agent.ReceiveBonusReward(bonusNegativeReward);
             }
         }
     }
