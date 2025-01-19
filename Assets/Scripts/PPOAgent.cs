@@ -13,7 +13,12 @@ public class PPOAgent : MonoBehaviour
     // Agent movement
     public float moveSpeed = 2f;
 
-    // Model parameters (weights for simplicity)
+    // Episode time limit
+    public int maxEpisodeSteps = 500;
+    [SerializeField]
+    private int currentStep = 0;
+
+    // Model parameters
     private float[] policyWeights; // Policy network weights
     private float[] valueWeights;  // Value network weights
 
@@ -24,15 +29,13 @@ public class PPOAgent : MonoBehaviour
     private List<float> values = new List<float>();     // Value estimations
     private List<float> advantages = new List<float>(); // Advantage estimations
 
-    // Unity-specific components
     private Rigidbody rb;
 
     private void Start()
     {
         rb = GetComponent<Rigidbody>();
 
-        // Initialize policy and value weights randomly
-        policyWeights = new float[4]; // Assuming 4 input features
+        policyWeights = new float[4];
         valueWeights = new float[4];
         for (int i = 0; i < 4; i++)
         {
@@ -43,35 +46,29 @@ public class PPOAgent : MonoBehaviour
 
     private void FixedUpdate()
     {
-        // Get the current state
-        float[] state = GetState();
+        currentStep++;
 
-        // Choose an action using the policy
+        float[] state = GetState();
+        float value = EstimateValue(state);
         int action = ChooseAction(state);
 
-        // Perform the action
         PerformAction(action);
 
-        // Calculate reward and store rollout data
         float reward = CalculateReward();
         states.Add(state);
         actions.Add(action);
         rewards.Add(reward);
+        values.Add(value);
 
-        // Check if episode is over
-        if (IsEpisodeOver())
+        if (HasFailed() || HasSucceeded() || currentStep >= maxEpisodeSteps)
         {
-            // Perform PPO update
             Train();
-
-            // Reset the environment
             ResetEnvironment();
         }
     }
 
     private float[] GetState()
     {
-        // Example state: agent's position relative to the goal
         Vector3 agentPos = transform.position;
         Vector3 goalPos = GameObject.Find("Goal").transform.position;
         return new float[] { agentPos.x, agentPos.z, goalPos.x, goalPos.z };
@@ -79,11 +76,9 @@ public class PPOAgent : MonoBehaviour
 
     private int ChooseAction(float[] state)
     {
-        // Softmax policy
         float[] logits = Forward(policyWeights, state);
         float[] probabilities = Softmax(logits);
 
-        // Sample an action based on probabilities
         float rand = Random.value;
         float cumulative = 0f;
         for (int i = 0; i < probabilities.Length; i++)
@@ -92,12 +87,11 @@ public class PPOAgent : MonoBehaviour
             if (rand < cumulative)
                 return i;
         }
-        return probabilities.Length - 1; // Fallback action
+        return probabilities.Length - 1;
     }
 
     private void PerformAction(int action)
     {
-        // Actions: 0 = forward, 1 = backward, 2 = left, 3 = right
         Vector3 move = Vector3.zero;
         switch (action)
         {
@@ -111,32 +105,35 @@ public class PPOAgent : MonoBehaviour
 
     private float CalculateReward()
     {
-        // Reward function: +1 for reaching the goal, -0.01 for each step, -1 for hitting obstacles
         Vector3 agentPos = transform.position;
         Vector3 goalPos = GameObject.Find("Goal").transform.position;
 
-        if (Vector3.Distance(agentPos, goalPos) < 1f)
+        if (HasSucceeded())
         {
-            return 1f; // Goal reached
+            return 1f;
         }
-        if (Physics.CheckSphere(agentPos, 0.5f, LayerMask.GetMask("Obstacle")))
+        if (HasFailed())
         {
-            return -1f; // Hit obstacle
+            return -1f; 
         }
-        return -0.01f; // Small penalty for each step
+        return -0.01f;
     }
 
-    private bool IsEpisodeOver()
+    private bool HasSucceeded()
     {
-        // End the episode if the agent reaches the goal or a maximum number of steps is reached
         Vector3 agentPos = transform.position;
         Vector3 goalPos = GameObject.Find("Goal").transform.position;
-        return Vector3.Distance(agentPos, goalPos) < 1f || rewards.Count >= 1000;
+        return Vector3.Distance(agentPos, goalPos) < 1f;
+    }
+
+    private bool HasFailed()
+    {
+        Vector3 agentPos = transform.position;
+        return Physics.CheckSphere(agentPos, 0.5f, LayerMask.GetMask("Obstacle"));
     }
 
     private void Train()
     {
-        // Calculate advantages and discounted rewards
         CalculateAdvantages();
 
         // Update policy and value networks using PPO
@@ -153,7 +150,7 @@ public class PPOAgent : MonoBehaviour
                 float[] logits = Forward(policyWeights, state);
                 float[] probabilities = Softmax(logits);
                 float oldProbability = probabilities[action];
-                float newProbability = Mathf.Exp(logits[action]); // Recalculate with updated weights
+                float newProbability = Mathf.Exp(logits[action]);
                 float ratio = newProbability / oldProbability;
 
                 // Clip the probability ratio
@@ -176,7 +173,6 @@ public class PPOAgent : MonoBehaviour
             }
         }
 
-        // Clear rollout data
         states.Clear();
         actions.Clear();
         rewards.Clear();
@@ -187,17 +183,27 @@ public class PPOAgent : MonoBehaviour
     private void CalculateAdvantages()
     {
         float lastValue = 0f;
+        advantages.Clear();
         for (int i = rewards.Count - 1; i >= 0; i--)
         {
             float tdError = rewards[i] + gamma * lastValue - values[i];
-            advantages.Insert(0, tdError);
+            advantages.Insert(0, tdError); // Insert at the beginning for correct order
             lastValue = values[i];
         }
     }
 
+    private float EstimateValue(float[] state)
+    {
+        float value = 0f;
+        for (int i = 0; i < state.Length; i++)
+        {
+            value += valueWeights[i] * state[i];
+        }
+        return value;
+    }
+
     private float[] Forward(float[] weights, float[] input)
     {
-        // Simple linear model: weights * input
         float[] output = new float[4];
         for (int i = 0; i < output.Length; i++)
         {
@@ -212,36 +218,28 @@ public class PPOAgent : MonoBehaviour
 
     private float[] Softmax(float[] logits)
     {
-        // Convert logits to probabilities using softmax
         float maxLogit = Mathf.Max(logits);
         float sum = 0f;
         float[] probabilities = new float[logits.Length];
         for (int i = 0; i < logits.Length; i++)
         {
-            probabilities[i] = Mathf.Exp(logits[i] - maxLogit); // Normalize logits for numerical stability
+            probabilities[i] = Mathf.Exp(logits[i] - maxLogit);
             sum += probabilities[i];
         }
         for (int i = 0; i < probabilities.Length; i++)
         {
-            probabilities[i] /= sum; // Divide by the sum to get probabilities
+            probabilities[i] /= sum;
         }
         return probabilities;
     }
 
     private void ResetEnvironment()
     {
-        // Reset agent position and goal position
-        transform.position = new Vector3(0, 0.5f, 0); // Reset agent to starting position
-        rb.velocity = Vector3.zero; // Stop any movement
+        transform.position = new Vector3(-5f, 0, 0);
+        rb.velocity = Vector3.zero;
 
-        GameObject goal = GameObject.Find("Goal");
-        goal.transform.position = new Vector3(
-            Random.Range(-5f, 5f),
-            0.5f,
-            Random.Range(-5f, 5f)
-        );
+        currentStep = 0;
 
-        // Clear rollout data for the next episode
         states.Clear();
         actions.Clear();
         rewards.Clear();
