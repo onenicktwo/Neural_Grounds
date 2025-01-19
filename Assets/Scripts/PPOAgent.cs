@@ -1,14 +1,14 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 
 public class PPOAgent : MonoBehaviour
 {
     // Hyperparameters
-    public float learningRate = 0.01f;
-    public float gamma = 0.99f; // Discount factor
-    public float clipEpsilon = 0.2f;
-    public int rolloutLength = 128; // Number of steps per training batch
-    public int epochs = 4;
+    public float learningRate = 0.01f; // Speed of learning, keep low for stability, (0, 1)
+    public float gamma = 0.99f; // Discount factor, keep high so agent thinks future rewards are more important (0, 1)
+    public float clipEpsilon = 0.2f; // Limits the size of policy updates in PPO, keep low for stability
+    public int rolloutLength = 128; // Number of steps per training batch, high = stable, slow to adapt, low = quick, noisy
+    public int epochs = 4; //# of times data is iterated over, high = thorough, possible overfit, low = might not extract all data
 
     // Agent movement
     public float moveSpeed = 2f;
@@ -26,7 +26,7 @@ public class PPOAgent : MonoBehaviour
     private List<float[]> states = new List<float[]>(); // State history
     private List<int> actions = new List<int>();        // Action history
     private List<float> rewards = new List<float>();    // Reward history
-    private List<float> values = new List<float>();     // Value estimations
+    private List<float> values = new List<float>();     // Value of state estimations
     private List<float> advantages = new List<float>(); // Advantage estimations
 
     private Rigidbody rb;
@@ -151,20 +151,22 @@ public class PPOAgent : MonoBehaviour
                 float[] probabilities = Softmax(logits);
                 float oldProbability = probabilities[action];
                 float newProbability = Mathf.Exp(logits[action]);
-                float ratio = newProbability / oldProbability;
+                float ratio = newProbability / oldProbability; // Policy ratio: r(θ) = π_θ(a|s) / π_θ_old(a|s)
 
-                // Clip the probability ratio
+                // Clipped surrogate objective: L^CLIP(θ) = E[min(r(θ)A, clip(r(θ), 1-ε, 1+ε)A)]
                 float clippedRatio = Mathf.Clamp(ratio, 1 - clipEpsilon, 1 + clipEpsilon);
                 float policyLoss = -Mathf.Min(ratio * advantage, clippedRatio * advantage);
 
-                // Update policy weights (gradient descent)
+                // Gradient descent update: θ = θ - α * ∇L
                 for (int j = 0; j < policyWeights.Length; j++)
                 {
                     policyWeights[j] -= learningRate * policyLoss * state[j];
                 }
 
-                // Update value network
+                // Value function update
+                // TD target: y = r + γV(s')
                 float targetValue = rewards[i] + gamma * (i < rewards.Count - 1 ? values[i + 1] : 0);
+                // Mean Squared Error loss: L = (y - V(s))^2
                 float valueLoss = Mathf.Pow(targetValue - values[i], 2);
                 for (int j = 0; j < valueWeights.Length; j++)
                 {
@@ -186,14 +188,16 @@ public class PPOAgent : MonoBehaviour
         advantages.Clear();
         for (int i = rewards.Count - 1; i >= 0; i--)
         {
+            // TD error as advantage estimate: A(s,a) ≈ r + γV(s') - V(s)
             float tdError = rewards[i] + gamma * lastValue - values[i];
-            advantages.Insert(0, tdError); // Insert at the beginning for correct order
+            advantages.Insert(0, tdError);
             lastValue = values[i];
         }
     }
 
     private float EstimateValue(float[] state)
     {
+        // Linear value function approximation: V(s) = w^T * s
         float value = 0f;
         for (int i = 0; i < state.Length; i++)
         {
@@ -204,6 +208,7 @@ public class PPOAgent : MonoBehaviour
 
     private float[] Forward(float[] weights, float[] input)
     {
+        // Linear layer: output = weights * input
         float[] output = new float[4];
         for (int i = 0; i < output.Length; i++)
         {
@@ -218,6 +223,7 @@ public class PPOAgent : MonoBehaviour
 
     private float[] Softmax(float[] logits)
     {
+        // Softmax function: P(a|s) = exp(log_a) / Σ exp(log_i)
         float maxLogit = Mathf.Max(logits);
         float sum = 0f;
         float[] probabilities = new float[logits.Length];
